@@ -1,0 +1,44 @@
+name: Custom Android Build (Arm64)
+
+on: workflow_dispatch  # Manual Trigger Button
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config curl make gperf bison flex yasm nasm python3 gettext
+
+      - name: Setup Android NDK
+        run: |
+          # We manually install the exact NDK version FFmpeg-Kit needs
+          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.1.8937393" "cmake;3.22.1"
+
+      - name: Run Build Script (The Heavy Lifting)
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_HOME }}/ndk/25.1.8937393
+        run: |
+          chmod +x android.sh
+          # We enable GPL (required for x264) and target ONLY arm64-v8a to save time
+          ./android.sh --enable-gpl --enable-x264 --speed-optimization --architectures=arm64-v8a
+
+      - name: Package the AAR
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: UPLOAD THE FILE (Critical Step!)
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-custom-ffmpeg-kit
+          path: android/ffmpeg-kit-android-lib/build/outputs/aar/*.aar
