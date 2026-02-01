@@ -1,6 +1,6 @@
-name: Custom Android Build (Arm64)
+name: Custom Android Build (Fixed)
 
-on: workflow_dispatch  # Manual Trigger Button
+on: workflow_dispatch
 
 jobs:
   build-android:
@@ -9,36 +9,43 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Setup Java 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Dependencies
+      - name: Install Linux Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake libtool pkg-config curl make gperf bison flex yasm nasm python3 gettext
 
-      - name: Setup Android NDK
-        run: |
-          # We manually install the exact NDK version FFmpeg-Kit needs
-          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.1.8937393" "cmake;3.22.1"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Run Build Script (The Heavy Lifting)
+      - name: Install Exact NDK Version
+        run: |
+          # Install the specific NDK version FFmpeg-Kit requires
+          sdkmanager --install "ndk;25.1.8937393" "cmake;3.22.1"
+
+      - name: Run Build Script (Fixed Path & Flags)
         env:
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_HOME }}/ndk/25.1.8937393
+          # FIX 1: Hardcode the path so it is 100% found
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/25.1.8937393
         run: |
           chmod +x android.sh
-          # We enable GPL (required for x264) and target ONLY arm64-v8a to save time
-          ./android.sh --enable-gpl --enable-x264 --speed-optimization --architectures=arm64-v8a
+          
+          # FIX 2: Removed "--speed-optimization" (It was causing the error)
+          # We only build arm64-v8a to make it faster
+          ./android.sh --enable-gpl --enable-x264 --architectures=arm64-v8a
 
       - name: Package the AAR
         run: |
           cd android
           ./gradlew assembleRelease
 
-      - name: UPLOAD THE FILE (Critical Step!)
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: my-custom-ffmpeg-kit
+          name: fixed-custom-ffmpeg
           path: android/ffmpeg-kit-android-lib/build/outputs/aar/*.aar
